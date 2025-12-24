@@ -21,7 +21,7 @@ A modern, production-ready template for building full-stack React applications u
 From the repo root, enter the frontend project:
 
 ```bash
-cd frontend/tlboard-web
+cd frontend
 ```
 
 Install the dependencies:
