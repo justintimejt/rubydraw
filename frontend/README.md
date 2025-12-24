@@ -30,6 +30,17 @@ Install the dependencies:
 npm install
 ```
 
+### Environment Configuration
+
+Create a `.env` file in the frontend directory (copy from `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+Required environment variables:
+- `VITE_GRAPHQL_ENDPOINT` - GraphQL API endpoint (default: `http://localhost:3000/graphql`)
+
 ### Development
 
 Start the development server with HMR:
