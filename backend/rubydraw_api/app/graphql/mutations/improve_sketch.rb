@@ -28,14 +28,21 @@ module Mutations
         errors: []
       }
     rescue GeminiService::Error => e
-      Rails.logger.error("Gemini service error: #{e.message}")
+      error_message = "Gemini service error: #{e.message}"
+      Rails.logger.error(error_message)
+      puts "[ImproveSketch] #{error_message}"
+      puts "[ImproveSketch] Error class: #{e.class.name}"
       {
         result: nil,
         errors: [e.message]
       }
     rescue StandardError => e
-      Rails.logger.error("Unexpected error in ImproveSketch: #{e.message}")
+      error_message = "Unexpected error in ImproveSketch: #{e.message}"
+      Rails.logger.error(error_message)
       Rails.logger.error(e.backtrace.join("\n"))
+      puts "[ImproveSketch] #{error_message}"
+      puts "[ImproveSketch] Error class: #{e.class.name}"
+      puts "[ImproveSketch] Backtrace: #{e.backtrace.first(10).join("\n")}"
       {
         result: nil,
         errors: ["An unexpected error occurred: #{e.message}"]

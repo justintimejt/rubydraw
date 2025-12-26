@@ -3,47 +3,61 @@
 # Service class for interacting with Google Gemini API
 # Handles sketch improvement requests with structured JSON output
 class GeminiService
-  API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+  # Using Gemini 2.5 Flash for structured outputs
+  API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+  # JSON Schema for structured output - must match Gemini API format
   JSON_SCHEMA = {
     type: "object",
-    additionalProperties: false,
     properties: {
-      cleanSvgPath: {
+      displaySvg: {
         type: "string",
-        description: "An SVG path 'd' string for ONE cleaned, CLOSED outline. No <svg> wrapper. No <path> tag. Just the d string."
+        description: "A complete styled SVG string (<svg ...>...</svg>) for 2D display in tldraw. May include multiple paths/groups. Must include viewBox."
+      },
+      extrusionPath: {
+        type: "string",
+        description: "A single closed silhouette outline as an SVG path 'd' string. No wrapper tags. Must represent ONE closed loop for extrusion."
       },
       isClosed: {
         type: "boolean",
-        description: "True if cleanSvgPath is a closed outline suitable for filling/extrusion."
+        description: "True if extrusionPath is a closed outline suitable for filling/extrusion."
       },
       suggestedDepth: {
         type: "number",
-        description: "Recommended extrusion depth in Three.js world units (e.g. 0.1–0.5)."
+        description: "Extrusion depth in Three.js world units (e.g. 0.1–0.5)."
       },
       suggestedBevel: {
         type: "number",
-        description: "Recommended bevel size in world units. Use 0 for no bevel."
+        description: "Bevel size in world units (0 for none)."
+      },
+      palette: {
+        type: "array",
+        items: { type: "string" },
+        description: "Hex colours used in displaySvg, e.g. [\"#111111\", \"#F97316\"]."
       },
       notes: {
         type: "string",
         description: "Short explanation of what was repaired (e.g. 'closed small gaps', 'smoothed jitter', 'snapped to symmetry')."
       }
     },
-    required: %w[cleanSvgPath isClosed suggestedDepth suggestedBevel notes]
+    required: ["displaySvg", "extrusionPath", "isClosed", "suggestedDepth", "suggestedBevel", "palette", "notes"]
   }.freeze
 
   SYSTEM_MESSAGE = <<~TEXT.strip
-    You are a vector cleanup engine for 3D extrusion.
-    You receive a rough sketch as SVG (from a drawing app).
-    Your job is to output a single clean CLOSED outline as an SVG path 'd' string suitable for filling and extrusion.
+    You are a vector cleanup and stylization engine for a sketch-to-3D app.
+
+    You will receive a rough sketch exported as SVG (and optionally a PNG preview).
+    Your job is to produce TWO outputs:
+    1) displaySvg: a complete, styled SVG suitable for clean 2D display (nice lines, colours, optional fills).
+    2) extrusionPath: a single, cleaned, CLOSED silhouette outline (SVG path d string) suitable for 3D extrusion.
 
     Hard rules:
-    - Output MUST be valid JSON matching the provided JSON schema.
-    - Output MUST contain only JSON (no markdown, no extra text).
-    - cleanSvgPath MUST be a single closed outline (one silhouette).
-    - Prefer smooth, simple geometry with fewer points (remove jitter).
+    - Output MUST be valid JSON matching the provided schema. Output ONLY JSON.
+    - displaySvg MUST include a viewBox and must not rely on external resources.
+    - displaySvg should use consistent stroke width and round joins/caps.
+    - Use a limited flat palette (3–5 colours max) and avoid gradients.
+    - extrusionPath MUST be ONE closed loop (single silhouette). Avoid holes for MVP.
     - Preserve the user's intent; do not invent unrelated details.
-    - If the drawing is ambiguous, choose the most likely intended silhouette and explain in notes.
+    - If ambiguous, choose the most likely silhouette and explain in notes.
   TEXT
 
   class Error < StandardError; end
@@ -58,20 +72,44 @@ class GeminiService
   #
   # @param svg [String] The input SVG string
   # @param hints [String, nil] Optional user hints for the improvement
-  # @return [Hash] Response with keys: cleanSvgPath, isClosed, suggestedDepth, suggestedBevel, notes
+  # @return [Hash] Response with keys: displaySvg, extrusionPath, isClosed, suggestedDepth, suggestedBevel, palette, notes
   # @raise [APIError] If the API call fails
   # @raise [InvalidResponseError] If the response cannot be parsed
   def improve_sketch(svg:, hints: nil)
+    puts "[GeminiService] Starting improve_sketch"
+    puts "[GeminiService] SVG length: #{svg.length}"
+    puts "[GeminiService] Hints: #{hints || 'none'}"
+    
     user_message = build_user_message(svg, hints)
     response = call_api(user_message)
 
     parse_response(response)
+  rescue Faraday::TimeoutError => e
+    error_message = "Gemini API request timed out: #{e.message}"
+    Rails.logger.error("Gemini API timeout: #{e.message}")
+    puts "[GeminiService] TIMEOUT ERROR: #{e.class.name} - #{e.message}"
+    puts "[GeminiService] This usually means the API is taking too long to respond."
+    puts "[GeminiService] Try reducing the SVG complexity or check your network connection."
+    puts "[GeminiService] Backtrace: #{e.backtrace.first(5).join("\n")}"
+    raise APIError, error_message
   rescue Faraday::Error => e
+    error_message = "Failed to call Gemini API: #{e.message}"
     Rails.logger.error("Gemini API error: #{e.message}")
-    raise APIError, "Failed to call Gemini API: #{e.message}"
+    puts "[GeminiService] Faraday error: #{e.class.name} - #{e.message}"
+    puts "[GeminiService] Backtrace: #{e.backtrace.first(5).join("\n")}"
+    raise APIError, error_message
   rescue JSON::ParserError => e
+    error_message = "Invalid JSON response from Gemini: #{e.message}"
     Rails.logger.error("Failed to parse Gemini response: #{e.message}")
-    raise InvalidResponseError, "Invalid JSON response from Gemini: #{e.message}"
+    puts "[GeminiService] JSON parse error: #{e.message}"
+    raise InvalidResponseError, error_message
+  rescue StandardError => e
+    error_message = "Unexpected error in GeminiService: #{e.class.name} - #{e.message}"
+    Rails.logger.error(error_message)
+    Rails.logger.error(e.backtrace.join("\n"))
+    puts "[GeminiService] Unexpected error: #{e.class.name} - #{e.message}"
+    puts "[GeminiService] Backtrace: #{e.backtrace.first(10).join("\n")}"
+    raise
   end
 
   private
@@ -79,25 +117,33 @@ class GeminiService
   def build_user_message(svg, hints)
     hint_text = hints&.strip&.present? ? hints.strip : "None"
     <<~TEXT.strip
-      Task: Clean and repair this rough sketch so it can be extruded into a 3D model.
+      Task: Improve this rough sketch so it looks clean in 2D and can be extruded in 3D.
 
-      What "clean" means:
-      - Remove jitter and wobbly lines
-      - Simplify while preserving the intended shape
-      - Close small gaps; ensure the outline is closed
-      - Fix minor self-intersections if needed to produce a valid filled silhouette
-      - Keep the final outline as ONE silhouette (single loop)
+      2D display goals (displaySvg):
+      - Crisp, clean strokes
+      - Consistent stroke width
+      - Round linecaps and round joins
+      - Optional flat fills (no gradients)
+      - Palette limited to 3–5 colours
+      - Simplify messy details; preserve intent
+      - Output a complete SVG string with <svg ... viewBox="..."> ... </svg>
+
+      3D modeling goals (extrusionPath):
+      - Return ONE closed silhouette outline as an SVG path 'd' string
+      - Remove jitter, repair tiny gaps, remove self-intersections where possible
+      - Keep it simple and extrudable (no holes for MVP)
+      - Ensure it is closed (ends with Z / closepath)
 
       Return format:
-      - Return ONLY JSON that matches the provided schema
-      - cleanSvgPath must be ONLY the SVG path 'd' string for the cleaned outline
-      - Do NOT include <svg> or <path> wrappers
-      - Do NOT return multiple paths
+      - Return ONLY JSON that matches the schema (no markdown)
 
       User hints (optional): #{hint_text}
 
-      Input SVG (selection export):
+      Input SVG:
       #{svg}
+
+      Optional PNG preview (base64, if provided):
+      #{""}
     TEXT
   end
 
@@ -107,18 +153,18 @@ class GeminiService
       f.request :json
       f.response :json
       f.adapter Faraday.default_adapter
+      # Set longer timeouts for Gemini API (it can take a while to process)
+      f.options.timeout = 120 # 2 minutes for the request
+      f.options.open_timeout = 30 # 30 seconds to establish connection
+      f.options.read_timeout = 120 # 2 minutes to read response
     end
 
+    # Build payload according to Gemini API v1beta format
     payload = {
-      systemInstruction: {
-        parts: [
-          { text: SYSTEM_MESSAGE }
-        ]
-      },
       contents: [
         {
           parts: [
-            { text: user_message }
+            { text: "#{SYSTEM_MESSAGE}\n\n#{user_message}" }
           ]
         }
       ],
@@ -127,44 +173,100 @@ class GeminiService
         responseSchema: JSON_SCHEMA
       }
     }
+    
+    # Add systemInstruction if supported (some models support it, others don't)
+    # For now, we'll include it in the user message to ensure compatibility
+    # Uncomment below if your model supports systemInstruction:
+    # payload[:systemInstruction] = {
+    #   parts: [
+    #     { text: SYSTEM_MESSAGE }
+    #   ]
+    # }
 
     Rails.logger.info("Calling Gemini API with SVG length: #{user_message.length}")
-
+    puts "[GeminiService] Calling Gemini API with SVG length: #{user_message.length}"
+    puts "[GeminiService] Request URL: #{url.gsub(/key=[^&]+/, 'key=***')}"
+    puts "[GeminiService] Payload size: #{payload.to_json.length} bytes"
+    puts "[GeminiService] Timeout settings: open=30s, read=120s, total=120s"
+    
+    start_time = Time.now
     response = conn.post(url, payload)
+    elapsed = Time.now - start_time
+    puts "[GeminiService] API call completed in #{elapsed.round(2)} seconds"
 
     unless response.success?
       error_body = response.body.is_a?(Hash) ? response.body : { error: response.body.to_s }
+      error_message = "Gemini API returned error: #{error_body}"
       Rails.logger.error("Gemini API error response: #{error_body}")
-      raise APIError, "Gemini API returned error: #{error_body}"
+      puts "[GeminiService] ERROR: #{error_message}"
+      puts "[GeminiService] Response status: #{response.status}"
+      puts "[GeminiService] Response headers: #{response.headers.inspect}"
+      puts "[GeminiService] Response body: #{error_body.inspect}"
+      puts "[GeminiService] Request URL: #{url.gsub(/key=[^&]+/, 'key=***')}"
+      puts "[GeminiService] Payload keys: #{payload.keys.inspect}"
+      raise APIError, error_message
     end
 
+    puts "[GeminiService] API call successful"
+    puts "[GeminiService] Full response body:"
+    puts JSON.pretty_generate(response.body)
     response.body
   end
 
   def parse_response(response_body)
+    puts "[GeminiService] Parsing response..."
+    puts "[GeminiService] Full response body for parsing:"
+    puts JSON.pretty_generate(response_body)
+    puts "[GeminiService] Response keys: #{response_body.keys.inspect}"
+    
     # Extract the text content from Gemini's response structure
     candidates = response_body.dig("candidates") || []
+    puts "[GeminiService] Found #{candidates.length} candidate(s)"
+    
     raise InvalidResponseError, "No candidates in response" if candidates.empty?
 
     content = candidates.first.dig("content", "parts")&.first&.dig("text")
+    puts "[GeminiService] Content present: #{content.present?}, length: #{content&.length}"
+    
     raise InvalidResponseError, "No text content in response" if content.blank?
 
     # Parse the JSON string
-    parsed = JSON.parse(content)
+    begin
+      parsed = JSON.parse(content)
+      puts "[GeminiService] Parsed JSON successfully:"
+      puts JSON.pretty_generate(parsed)
+      puts "[GeminiService] Parsed keys: #{parsed.keys.inspect}"
+    rescue JSON::ParserError => e
+      puts "[GeminiService] JSON parse error: #{e.message}"
+      puts "[GeminiService] Content preview: #{content[0..500]}"
+      raise InvalidResponseError, "Failed to parse JSON response: #{e.message}"
+    end
     
     # Validate required fields
     required_fields = %w[cleanSvgPath isClosed suggestedDepth suggestedBevel notes]
     missing = required_fields - parsed.keys
-    raise InvalidResponseError, "Missing required fields: #{missing.join(', ')}" unless missing.empty?
+    if missing.any?
+      puts "[GeminiService] Missing required fields: #{missing.join(', ')}"
+      puts "[GeminiService] Available fields: #{parsed.keys.join(', ')}"
+      raise InvalidResponseError, "Missing required fields: #{missing.join(', ')}"
+    end
 
     # Convert to symbol keys for consistency
-    {
+    result = {
       cleanSvgPath: parsed["cleanSvgPath"],
       isClosed: parsed["isClosed"],
       suggestedDepth: parsed["suggestedDepth"].to_f,
       suggestedBevel: parsed["suggestedBevel"].to_f,
       notes: parsed["notes"]
     }
+    
+    puts "[GeminiService] Successfully parsed response"
+    puts "[GeminiService] cleanSvgPath length: #{result[:cleanSvgPath].length}"
+    puts "[GeminiService] isClosed: #{result[:isClosed]}"
+    puts "[GeminiService] suggestedDepth: #{result[:suggestedDepth]}"
+    puts "[GeminiService] suggestedBevel: #{result[:suggestedBevel]}"
+    
+    result
   end
 end
 

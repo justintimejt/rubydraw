@@ -12,6 +12,7 @@ export async function exportSelectedShapesAsSvg(editor: Editor): Promise<string 
     // In tldraw v4, getSvgString returns an object with { svg: string, width: number, height: number }
     if (typeof editorAny.getSvgString === 'function') {
       const result = await editorAny.getSvgString(selectedIds);
+      console.log('getSvgString result:', result, 'type:', typeof result);
       
       // Check if result has a 'svg' property (the actual SVG string)
       if (result && typeof result.svg === 'string' && result.svg.length > 0) {
@@ -22,6 +23,8 @@ export async function exportSelectedShapesAsSvg(editor: Editor): Promise<string 
       if (typeof result === 'string' && result.length > 0) {
         return result;
       }
+      
+      console.warn('getSvgString returned unexpected format:', result);
     }
     
     // Fallback: try getSvg if it exists (returns SVGElement)

@@ -10,6 +10,7 @@ import { toExtrudedGeometryFromShape } from "../lib/tldraw/toGeometry";
 import { exportSelectedShapesAsSvg } from "../lib/tldraw/exportSvg";
 import { improveSketch } from "../lib/graphql/mutations";
 import { extrudeSvgPath } from "../lib/three/svgToGeometry";
+import { addImprovedShapeToCanvas } from "../lib/tldraw/addImprovedShape";
 import type { GeminiSketchResponse } from "../lib/gemini/improveSketchPrompt";
 
 export const meta = () => [
@@ -145,17 +146,24 @@ export default function BoardRoute() {
         return;
       }
 
+      const improvedData = {
+        cleanSvgPath: result.result.cleanSvgPath,
+        isClosed: result.result.isClosed,
+        suggestedDepth: result.result.suggestedDepth,
+        suggestedBevel: result.result.suggestedBevel,
+        notes: result.result.notes,
+      };
+
       setImproveState({
         status: "success",
-        data: {
-          cleanSvgPath: result.result.cleanSvgPath,
-          isClosed: result.result.isClosed,
-          suggestedDepth: result.result.suggestedDepth,
-          suggestedBevel: result.result.suggestedBevel,
-          notes: result.result.notes,
-        },
+        data: improvedData,
         error: null,
       });
+
+      // Add the improved shape to the canvas
+      const currentSelection = editor.getSelectedShapeIds();
+      const originalShapeId = currentSelection.length > 0 ? currentSelection[0] : undefined;
+      addImprovedShapeToCanvas(editor, improvedData.cleanSvgPath, originalShapeId);
     } catch (error) {
       console.error("Improve sketch error:", error);
       let errorMessage = "Failed to improve sketch";
