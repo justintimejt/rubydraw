@@ -22,11 +22,9 @@ default: &default
 
 development:
   <<: *default
-  # Use DATABASE_URL environment variable if provided (for Supabase/cloud PostgreSQL)
-  # Otherwise fall back to local database
-  <% if ENV['DATABASE_URL'].present? %>
-  url: <%= ENV['DATABASE_URL'] %>
-  <% else %>
+  # Default to local PostgreSQL
+  # To use Supabase, set DATABASE_URL in .env file
+  # If DATABASE_URL is set and valid, it will be used automatically by Rails
   database: rubydraw_api_development
 
   # The specified database role being used to connect to PostgreSQL.
@@ -46,7 +44,6 @@ development:
   # The TCP port the server listens on. Defaults to 5432.
   # If your server runs on a different port number, change accordingly.
   #port: 5432
-  <% end %>
 
   # Schema search path. The server defaults to $user,public
   #schema_search_path: myapp,sharedapp,public

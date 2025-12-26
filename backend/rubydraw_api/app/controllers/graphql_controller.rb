@@ -51,6 +51,14 @@ class GraphqlController < ApplicationController
 
   def current_user
     # TODO: replace with real authentication
-    User.first || User.create!(email: "demo@example.com")
+    # Return nil if database is not available (e.g., using Supabase but not configured)
+    return nil unless ActiveRecord::Base.connected?
+    
+    begin
+      User.first || User.create!(email: "demo@example.com")
+    rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::StatementInvalid => e
+      Rails.logger.warn("Database not available for user lookup: #{e.message}")
+      nil
+    end
   end
 end

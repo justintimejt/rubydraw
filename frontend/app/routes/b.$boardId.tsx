@@ -110,19 +110,21 @@ export default function BoardRoute() {
       return;
     }
 
-    const svg = exportSelectedShapesAsSvg(editor);
-    if (!svg) {
-      setImproveState({
-        status: "error",
-        data: null,
-        error: "No shapes selected or unable to export SVG",
-      });
-      return;
-    }
-
     setImproveState({ status: "loading", data: null, error: null });
 
     try {
+      const svg = await exportSelectedShapesAsSvg(editor);
+      console.log('Exported SVG type:', typeof svg, 'value:', svg?.substring?.(0, 100));
+      
+      if (!svg || typeof svg !== 'string' || svg.trim().length === 0) {
+        setImproveState({
+          status: "error",
+          data: null,
+          error: `Unable to export SVG. Got type: ${typeof svg}. Please try selecting a different shape.`,
+        });
+        return;
+      }
+
       const result = await improveSketch(svg);
       
       if (result.errors && result.errors.length > 0) {
