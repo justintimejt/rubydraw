@@ -17,18 +17,23 @@ const IMPROVE_SKETCH_MUTATION = `
 `;
 
 export async function improveSketch(svg: string, hints?: string) {
-  const data = await graphqlClient.request<{
-    improveSketch: {
-      result: {
-        cleanSvgPath: string;
-        isClosed: boolean;
-        suggestedDepth: number;
-        suggestedBevel: number;
-        notes: string;
-      } | null;
-      errors: string[];
-    };
-  }>(IMPROVE_SKETCH_MUTATION, { svg, hints });
-  return data.improveSketch;
+  try {
+    const data = await graphqlClient.request<{
+      improveSketch: {
+        result: {
+          cleanSvgPath: string;
+          isClosed: boolean;
+          suggestedDepth: number;
+          suggestedBevel: number;
+          notes: string;
+        } | null;
+        errors: string[];
+      };
+    }>(IMPROVE_SKETCH_MUTATION, { svg, hints });
+    return data.improveSketch;
+  } catch (error) {
+    console.error("GraphQL request error:", error);
+    throw error;
+  }
 }
 

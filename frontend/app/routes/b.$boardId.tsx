@@ -155,10 +155,21 @@ export default function BoardRoute() {
         error: null,
       });
     } catch (error) {
+      console.error("Improve sketch error:", error);
+      let errorMessage = "Failed to improve sketch";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("fetch")) {
+          errorMessage = `Network error: Cannot connect to backend. Make sure the Rails server is running on ${import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:3000/graphql'}`;
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       setImproveState({
         status: "error",
         data: null,
-        error: error instanceof Error ? error.message : "Failed to improve sketch",
+        error: errorMessage,
       });
     }
   }, [editor]);
