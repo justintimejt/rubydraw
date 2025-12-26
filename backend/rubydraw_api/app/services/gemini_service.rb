@@ -153,10 +153,10 @@ class GeminiService
       f.request :json
       f.response :json
       f.adapter Faraday.default_adapter
-      # Set longer timeouts for Gemini API (it can take a while to process)
-      f.options.timeout = 120 # 2 minutes for the request
+      # Set longer timeouts for Gemini API (it can take a while to process complex SVGs)
+      f.options.timeout = 300 # 5 minutes for the request
       f.options.open_timeout = 30 # 30 seconds to establish connection
-      f.options.read_timeout = 120 # 2 minutes to read response
+      f.options.read_timeout = 300 # 5 minutes to read response
     end
 
     # Build payload according to Gemini API v1beta format
@@ -187,7 +187,7 @@ class GeminiService
     puts "[GeminiService] Calling Gemini API with SVG length: #{user_message.length}"
     puts "[GeminiService] Request URL: #{url.gsub(/key=[^&]+/, 'key=***')}"
     puts "[GeminiService] Payload size: #{payload.to_json.length} bytes"
-    puts "[GeminiService] Timeout settings: open=30s, read=120s, total=120s"
+    puts "[GeminiService] Timeout settings: open=30s, read=300s, total=300s"
     
     start_time = Time.now
     response = conn.post(url, payload)
@@ -243,7 +243,7 @@ class GeminiService
     end
     
     # Validate required fields
-    required_fields = %w[cleanSvgPath isClosed suggestedDepth suggestedBevel notes]
+    required_fields = %w[displaySvg extrusionPath isClosed suggestedDepth suggestedBevel palette notes]
     missing = required_fields - parsed.keys
     if missing.any?
       puts "[GeminiService] Missing required fields: #{missing.join(', ')}"
@@ -253,18 +253,22 @@ class GeminiService
 
     # Convert to symbol keys for consistency
     result = {
-      cleanSvgPath: parsed["cleanSvgPath"],
+      displaySvg: parsed["displaySvg"],
+      extrusionPath: parsed["extrusionPath"],
       isClosed: parsed["isClosed"],
       suggestedDepth: parsed["suggestedDepth"].to_f,
       suggestedBevel: parsed["suggestedBevel"].to_f,
+      palette: parsed["palette"] || [],
       notes: parsed["notes"]
     }
     
     puts "[GeminiService] Successfully parsed response"
-    puts "[GeminiService] cleanSvgPath length: #{result[:cleanSvgPath].length}"
+    puts "[GeminiService] displaySvg length: #{result[:displaySvg].length}"
+    puts "[GeminiService] extrusionPath length: #{result[:extrusionPath].length}"
     puts "[GeminiService] isClosed: #{result[:isClosed]}"
     puts "[GeminiService] suggestedDepth: #{result[:suggestedDepth]}"
     puts "[GeminiService] suggestedBevel: #{result[:suggestedBevel]}"
+    puts "[GeminiService] palette: #{result[:palette].inspect}"
     
     result
   end

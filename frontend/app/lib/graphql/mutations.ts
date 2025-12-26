@@ -5,10 +5,12 @@ const IMPROVE_SKETCH_MUTATION = `
   mutation ImproveSketch($input: ImproveSketchInput!) {
     improveSketch(input: $input) {
       result {
-        cleanSvgPath
+        displaySvg
+        extrusionPath
         isClosed
         suggestedDepth
         suggestedBevel
+        palette
         notes
       }
       errors
@@ -31,10 +33,12 @@ export async function improveSketch(svg: string, hints?: string) {
     const data = await graphqlClient.request<{
       improveSketch: {
         result: {
-          cleanSvgPath: string;
+          displaySvg: string;
+          extrusionPath: string;
           isClosed: boolean;
           suggestedDepth: number;
           suggestedBevel: number;
+          palette: string[];
           notes: string;
         } | null;
         errors: string[];

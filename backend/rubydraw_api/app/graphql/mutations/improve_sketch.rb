@@ -19,10 +19,12 @@ module Mutations
 
       {
         result: {
-          clean_svg_path: result[:cleanSvgPath],
+          display_svg: result[:displaySvg],
+          extrusion_path: result[:extrusionPath],
           is_closed: result[:isClosed],
           suggested_depth: result[:suggestedDepth],
           suggested_bevel: result[:suggestedBevel],
+          palette: result[:palette],
           notes: result[:notes]
         },
         errors: []

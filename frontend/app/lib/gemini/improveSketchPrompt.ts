@@ -4,10 +4,12 @@ type ImproveSketchInputs = {
 };
 
 export type GeminiSketchResponse = {
-  cleanSvgPath: string;
+  displaySvg: string;
+  extrusionPath: string;
   isClosed: boolean;
   suggestedDepth: number;
   suggestedBevel: number;
+  palette: string[];
   notes: string;
 };
 

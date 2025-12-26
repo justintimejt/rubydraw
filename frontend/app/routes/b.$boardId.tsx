@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useParams } from "react-router";
 import type { Editor } from "tldraw";
+import type { TLShapeId } from "tldraw";
 import * as THREE from "three";
 
 import { SplitPane } from "../components/SplitPane";
@@ -47,7 +48,7 @@ export default function BoardRoute() {
     // If we have improved sketch data, use it
     if (improveState.status === "success" && improveState.data) {
       const improvedGeometry = extrudeSvgPath(
-        improveState.data.cleanSvgPath,
+        improveState.data.extrusionPath,
         improveState.data.suggestedDepth,
         improveState.data.suggestedBevel
       );
@@ -61,7 +62,7 @@ export default function BoardRoute() {
       return;
     }
 
-    const shape = editor.getShape(selectedShapeIds[0]);
+    const shape = editor.getShape(selectedShapeIds[0] as TLShapeId);
     if (!shape) {
       setGeometry(null);
       return;
@@ -147,10 +148,12 @@ export default function BoardRoute() {
       }
 
       const improvedData = {
-        cleanSvgPath: result.result.cleanSvgPath,
+        displaySvg: result.result.displaySvg,
+        extrusionPath: result.result.extrusionPath,
         isClosed: result.result.isClosed,
         suggestedDepth: result.result.suggestedDepth,
         suggestedBevel: result.result.suggestedBevel,
+        palette: result.result.palette,
         notes: result.result.notes,
       };
 
@@ -160,10 +163,10 @@ export default function BoardRoute() {
         error: null,
       });
 
-      // Add the improved shape to the canvas
+      // Add the improved shape to the canvas using displaySvg
       const currentSelection = editor.getSelectedShapeIds();
       const originalShapeId = currentSelection.length > 0 ? currentSelection[0] : undefined;
-      addImprovedShapeToCanvas(editor, improvedData.cleanSvgPath, originalShapeId);
+      addImprovedShapeToCanvas(editor, improvedData.displaySvg, originalShapeId);
     } catch (error) {
       console.error("Improve sketch error:", error);
       let errorMessage = "Failed to improve sketch";
