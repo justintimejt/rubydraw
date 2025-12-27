@@ -106,3 +106,4 @@ If you want to switch back to local PostgreSQL:
 2. Make sure local PostgreSQL is running
 3. Restart the Rails server
 
+

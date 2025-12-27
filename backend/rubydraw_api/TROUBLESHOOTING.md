@@ -66,3 +66,4 @@ If it says "NOT SET", the .env file is not being loaded. Check:
 - File name (must be exactly `.env`)
 - Restart the server
 
+

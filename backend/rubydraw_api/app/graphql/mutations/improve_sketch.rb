@@ -2,29 +2,30 @@
 
 module Mutations
   class ImproveSketch < Mutations::BaseMutation
-    description "Improve a rough sketch SVG by cleaning and repairing it via Gemini API"
+    description "Improve a rough sketch by sending PNG image to Gemini API for cleaning and repair"
 
-    argument :svg, String, required: true, description: "The input SVG string to improve"
+    # Define arguments directly - RelayClassicMutation will auto-generate the input type
+    argument :png_base64, String, required: true, description: "The input PNG image as base64 string"
+    argument :svg, String, required: false, description: "Optional SVG string for structural hints"
     argument :hints, String, required: false, description: "Optional hints for the improvement process"
 
     field :result, Types::ImproveSketchResultType, null: true, description: "The improved sketch result"
     field :errors, [String], null: false, description: "List of errors if the operation failed"
 
-    def resolve(svg:, hints: nil)
+    def resolve(png_base64:, svg: nil, hints: nil)
       # No authentication required for MVP, but can add later
       # user = context[:current_user] or raise GraphQL::ExecutionError, "Unauthorized"
 
       service = GeminiService.new
-      result = service.improve_sketch(svg: svg, hints: hints)
+      result = service.improve_sketch(png_base64: png_base64, svg: svg, hints: hints)
 
       {
         result: {
-          display_svg: result[:displaySvg],
-          extrusion_path: result[:extrusionPath],
-          is_closed: result[:isClosed],
-          suggested_depth: result[:suggestedDepth],
-          suggested_bevel: result[:suggestedBevel],
+          image_base64: result[:image_base64],
+          title: result[:title],
+          style: result[:style],
           palette: result[:palette],
+          background: result[:background],
           notes: result[:notes]
         },
         errors: []

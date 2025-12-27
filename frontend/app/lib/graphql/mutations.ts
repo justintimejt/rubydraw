@@ -1,16 +1,14 @@
 import { graphqlClient } from './client';
-import type { GeminiSketchResponse } from '../gemini/improveSketchPrompt';
 
 const IMPROVE_SKETCH_MUTATION = `
   mutation ImproveSketch($input: ImproveSketchInput!) {
     improveSketch(input: $input) {
       result {
-        displaySvg
-        extrusionPath
-        isClosed
-        suggestedDepth
-        suggestedBevel
+        imageBase64
+        title
+        style
         palette
+        background
         notes
       }
       errors
@@ -18,34 +16,34 @@ const IMPROVE_SKETCH_MUTATION = `
   }
 `;
 
-export async function improveSketch(svg: string, hints?: string) {
-  // Validate svg is actually a string
-  if (typeof svg !== 'string') {
-    console.error('improveSketch called with non-string svg:', typeof svg, svg);
-    throw new Error(`SVG must be a string, got ${typeof svg}`);
+export async function improveSketch(pngBase64: string, svg?: string, hints?: string) {
+  // Validate pngBase64 is actually a string
+  if (typeof pngBase64 !== 'string') {
+    console.error('improveSketch called with non-string pngBase64:', typeof pngBase64, pngBase64);
+    throw new Error(`PNG base64 must be a string, got ${typeof pngBase64}`);
   }
   
-  if (!svg || svg.trim().length === 0) {
-    throw new Error('SVG string is empty');
+  if (!pngBase64 || pngBase64.trim().length === 0) {
+    throw new Error('PNG base64 string is empty');
   }
   
   try {
     const data = await graphqlClient.request<{
       improveSketch: {
         result: {
-          displaySvg: string;
-          extrusionPath: string;
-          isClosed: boolean;
-          suggestedDepth: number;
-          suggestedBevel: number;
+          imageBase64: string;
+          title: string;
+          style: string;
           palette: string[];
+          background: string;
           notes: string;
         } | null;
         errors: string[];
       };
     }>(IMPROVE_SKETCH_MUTATION, { 
       input: {
-        svg: String(svg), // Ensure it's a string
+        pngBase64: String(pngBase64), // Ensure it's a string
+        svg: svg ? String(svg) : null,
         hints: hints ? String(hints) : null
       }
     });
@@ -55,4 +53,5 @@ export async function improveSketch(svg: string, hints?: string) {
     throw error;
   }
 }
+
 

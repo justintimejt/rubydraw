@@ -32,12 +32,12 @@ Rails 8 + GraphQL API lives in `rubydraw_api/` (Ruby 3.2.2, PostgreSQL).
    ```
 
 2. **Install dependencies and setup**:
-   ```bash
-   cd rubydraw_api
-   bundle install
-   bin/rails db:prepare   # create DB + run migrations
-   bin/rails server
-   ```
+```bash
+cd rubydraw_api
+bundle install
+bin/rails db:prepare   # create DB + run migrations
+bin/rails server
+```
 
 ## Environment Variables
 

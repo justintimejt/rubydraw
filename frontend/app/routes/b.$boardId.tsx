@@ -9,19 +9,28 @@ import { TldrawBoard } from "../components/TldrawBoard";
 import { ThreePreview } from "../components/ThreePreview";
 import { toExtrudedGeometryFromShape } from "../lib/tldraw/toGeometry";
 import { exportSelectedShapesAsSvg } from "../lib/tldraw/exportSvg";
+import { exportSelectedShapesAsPng } from "../lib/tldraw/exportPng";
 import { improveSketch } from "../lib/graphql/mutations";
 import { extrudeSvgPath } from "../lib/three/svgToGeometry";
-import { addImprovedShapeToCanvas } from "../lib/tldraw/addImprovedShape";
-import type { GeminiSketchResponse } from "../lib/gemini/improveSketchPrompt";
+import { addImprovedImageToCanvas } from "../lib/tldraw/addImprovedImage";
 
 export const meta = () => [
   { title: "Rubydraw Board" },
   { name: "description", content: "Draw and preview in 3D." },
 ];
 
+type ImprovedSketchData = {
+  imageBase64: string;
+  title: string;
+  style: string;
+  palette: string[];
+  background: string;
+  notes: string;
+};
+
 type ImproveState = {
   status: "idle" | "loading" | "success" | "error";
-  data: GeminiSketchResponse | null;
+  data: ImprovedSketchData | null;
   error: string | null;
 };
 
@@ -43,32 +52,33 @@ export default function BoardRoute() {
 
   // Update geometry when shape selection or improve state changes
   React.useEffect(() => {
-    if (!editor) return;
-
-    // If we have improved sketch data, use it
-    if (improveState.status === "success" && improveState.data) {
-      const improvedGeometry = extrudeSvgPath(
-        improveState.data.extrusionPath,
-        improveState.data.suggestedDepth,
-        improveState.data.suggestedBevel
-      );
-      setGeometry(improvedGeometry);
+    if (!editor) {
+      console.log('[BoardRoute] No editor, clearing geometry');
+      setGeometry(null);
       return;
     }
 
+    // Note: Improved sketches are now images, not 3D geometry
+    // Keep using original shape geometry for 3D preview
+
     // Otherwise, use simple shape conversion
     if (selectedShapeIds.length !== 1) {
+      console.log('[BoardRoute] Selection count:', selectedShapeIds.length, '- clearing geometry');
       setGeometry(null);
       return;
     }
 
     const shape = editor.getShape(selectedShapeIds[0] as TLShapeId);
     if (!shape) {
+      console.log('[BoardRoute] Shape not found, clearing geometry');
       setGeometry(null);
       return;
     }
 
-    setGeometry(toExtrudedGeometryFromShape(shape));
+    console.log('[BoardRoute] Converting shape to geometry:', shape.type);
+    const shapeGeometry = toExtrudedGeometryFromShape(shape);
+    console.log('[BoardRoute] Shape geometry result:', shapeGeometry ? 'success' : 'null');
+    setGeometry(shapeGeometry);
   }, [editor, selectedShapeIds, improveState]);
 
   // Listen to selection changes
@@ -115,19 +125,23 @@ export default function BoardRoute() {
     setImproveState({ status: "loading", data: null, error: null });
 
     try {
-      const svg = await exportSelectedShapesAsSvg(editor);
-      console.log('Exported SVG type:', typeof svg, 'value:', svg?.substring?.(0, 100));
+      // Export as PNG (preferred for image generation)
+      const pngBase64 = await exportSelectedShapesAsPng(editor);
+      console.log('Exported PNG base64 length:', pngBase64?.length);
       
-      if (!svg || typeof svg !== 'string' || svg.trim().length === 0) {
+      if (!pngBase64 || typeof pngBase64 !== 'string' || pngBase64.trim().length === 0) {
         setImproveState({
           status: "error",
           data: null,
-          error: `Unable to export SVG. Got type: ${typeof svg}. Please try selecting a different shape.`,
+          error: `Unable to export PNG. Got type: ${typeof pngBase64}. Please try selecting a different shape.`,
         });
         return;
       }
 
-      const result = await improveSketch(svg);
+      // Optionally export SVG for structural hints
+      const svg = await exportSelectedShapesAsSvg(editor);
+
+      const result = await improveSketch(pngBase64, svg || undefined);
       
       if (result.errors && result.errors.length > 0) {
         setImproveState({
@@ -148,12 +162,11 @@ export default function BoardRoute() {
       }
 
       const improvedData = {
-        displaySvg: result.result.displaySvg,
-        extrusionPath: result.result.extrusionPath,
-        isClosed: result.result.isClosed,
-        suggestedDepth: result.result.suggestedDepth,
-        suggestedBevel: result.result.suggestedBevel,
+        imageBase64: result.result.imageBase64,
+        title: result.result.title,
+        style: result.result.style,
         palette: result.result.palette,
+        background: result.result.background,
         notes: result.result.notes,
       };
 
@@ -163,10 +176,10 @@ export default function BoardRoute() {
         error: null,
       });
 
-      // Add the improved shape to the canvas using displaySvg
+      // Add the improved image to the canvas
       const currentSelection = editor.getSelectedShapeIds();
       const originalShapeId = currentSelection.length > 0 ? currentSelection[0] : undefined;
-      addImprovedShapeToCanvas(editor, improvedData.displaySvg, originalShapeId);
+      addImprovedImageToCanvas(editor, improvedData.imageBase64, originalShapeId);
     } catch (error) {
       console.error("Improve sketch error:", error);
       let errorMessage = "Failed to improve sketch";

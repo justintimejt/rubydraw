@@ -55,7 +55,7 @@ class GraphqlController < ApplicationController
     return nil unless ActiveRecord::Base.connected?
     
     begin
-      User.first || User.create!(email: "demo@example.com")
+    User.first || User.create!(email: "demo@example.com")
     rescue ActiveRecord::ConnectionNotEstablished, ActiveRecord::StatementInvalid => e
       Rails.logger.warn("Database not available for user lookup: #{e.message}")
       nil

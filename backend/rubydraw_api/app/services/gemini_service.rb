@@ -1,63 +1,52 @@
 # frozen_string_literal: true
 
 # Service class for interacting with Google Gemini API
-# Handles sketch improvement requests with structured JSON output
+# Handles sketch improvement requests with image generation
 class GeminiService
-  # Using Gemini 2.5 Flash for structured outputs
-  API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-  # JSON Schema for structured output - must match Gemini API format
+  # Using Gemini 2.0 Flash Preview with image generation
+  API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent"
+  # JSON Schema for metadata output - must match Gemini API format
   JSON_SCHEMA = {
     type: "object",
     properties: {
-      displaySvg: {
+      title: {
         type: "string",
-        description: "A complete styled SVG string (<svg ...>...</svg>) for 2D display in tldraw. May include multiple paths/groups. Must include viewBox."
+        description: "Short title describing the improved sketch"
       },
-      extrusionPath: {
+      style: {
         type: "string",
-        description: "A single closed silhouette outline as an SVG path 'd' string. No wrapper tags. Must represent ONE closed loop for extrusion."
-      },
-      isClosed: {
-        type: "boolean",
-        description: "True if extrusionPath is a closed outline suitable for filling/extrusion."
-      },
-      suggestedDepth: {
-        type: "number",
-        description: "Extrusion depth in Three.js world units (e.g. 0.1–0.5)."
-      },
-      suggestedBevel: {
-        type: "number",
-        description: "Bevel size in world units (0 for none)."
+        description: "Style description, e.g. 'clean flat vector', 'ink outline', 'sticker'"
       },
       palette: {
         type: "array",
         items: { type: "string" },
-        description: "Hex colours used in displaySvg, e.g. [\"#111111\", \"#F97316\"]."
+        description: "Hex colors used in the image, e.g. [\"#111111\", \"#F97316\"]"
+      },
+      background: {
+        type: "string",
+        description: "'transparent' or a hex color"
       },
       notes: {
         type: "string",
-        description: "Short explanation of what was repaired (e.g. 'closed small gaps', 'smoothed jitter', 'snapped to symmetry')."
+        description: "What was improved (smooth lines, consistent stroke, etc.)"
       }
     },
-    required: ["displaySvg", "extrusionPath", "isClosed", "suggestedDepth", "suggestedBevel", "palette", "notes"]
+    required: ["title", "style", "palette", "background", "notes"]
   }.freeze
 
   SYSTEM_MESSAGE = <<~TEXT.strip
-    You are a vector cleanup and stylization engine for a sketch-to-3D app.
+    You are a sketch cleanup and illustration engine for a drawing app.
 
-    You will receive a rough sketch exported as SVG (and optionally a PNG preview).
-    Your job is to produce TWO outputs:
-    1) displaySvg: a complete, styled SVG suitable for clean 2D display (nice lines, colours, optional fills).
-    2) extrusionPath: a single, cleaned, CLOSED silhouette outline (SVG path d string) suitable for 3D extrusion.
+    You will receive a rough sketch image (and optionally its SVG).
+    Your job is to generate ONE cleaned 2D illustration that preserves the user's intent.
 
     Hard rules:
-    - Output MUST be valid JSON matching the provided schema. Output ONLY JSON.
-    - displaySvg MUST include a viewBox and must not rely on external resources.
-    - displaySvg should use consistent stroke width and round joins/caps.
-    - Use a limited flat palette (3–5 colours max) and avoid gradients.
-    - extrusionPath MUST be ONE closed loop (single silhouette). Avoid holes for MVP.
-    - Preserve the user's intent; do not invent unrelated details.
-    - If ambiguous, choose the most likely silhouette and explain in notes.
+    - Produce exactly ONE image.
+    - Use clean, confident lines: consistent stroke width, smooth curves, tidy edges.
+    - Use a limited palette (3–5 colors max) and flat fills. No gradients.
+    - Prefer transparent background unless the user asks otherwise.
+    - Avoid tiny details and noise; simplify while keeping recognizability.
+    - Also output ONE JSON metadata object as plain text (and nothing else in text).
   TEXT
 
   class Error < StandardError; end
@@ -68,20 +57,22 @@ class GeminiService
     @api_key = api_key || ENV.fetch("GEMINI_API_KEY") { raise Error, "GEMINI_API_KEY environment variable is required" }
   end
 
-  # Improves a sketch SVG by sending it to Gemini for cleaning/repair
+  # Improves a sketch by sending PNG image to Gemini for cleaning/repair
   #
-  # @param svg [String] The input SVG string
+  # @param png_base64 [String] The input PNG image as base64 string
+  # @param svg [String, nil] Optional SVG string for structural hints
   # @param hints [String, nil] Optional user hints for the improvement
-  # @return [Hash] Response with keys: displaySvg, extrusionPath, isClosed, suggestedDepth, suggestedBevel, palette, notes
+  # @return [Hash] Response with keys: image_base64, title, style, palette, background, notes
   # @raise [APIError] If the API call fails
   # @raise [InvalidResponseError] If the response cannot be parsed
-  def improve_sketch(svg:, hints: nil)
+  def improve_sketch(png_base64:, svg: nil, hints: nil)
     puts "[GeminiService] Starting improve_sketch"
-    puts "[GeminiService] SVG length: #{svg.length}"
+    puts "[GeminiService] PNG base64 length: #{png_base64.length}"
+    puts "[GeminiService] SVG provided: #{svg.present?}"
     puts "[GeminiService] Hints: #{hints || 'none'}"
     
     user_message = build_user_message(svg, hints)
-    response = call_api(user_message)
+    response = call_api(user_message, png_base64)
 
     parse_response(response)
   rescue Faraday::TimeoutError => e
@@ -116,75 +107,83 @@ class GeminiService
 
   def build_user_message(svg, hints)
     hint_text = hints&.strip&.present? ? hints.strip : "None"
-    <<~TEXT.strip
-      Task: Improve this rough sketch so it looks clean in 2D and can be extruded in 3D.
+    hint_placeholder = hint_text != "None" ? hint_text : ""
+    
+    message = <<~TEXT.strip
+      Task: Improve this rough sketch into a clean 2D illustration for display on a canvas.
 
-      2D display goals (displaySvg):
-      - Crisp, clean strokes
-      - Consistent stroke width
-      - Round linecaps and round joins
-      - Optional flat fills (no gradients)
-      - Palette limited to 3–5 colours
-      - Simplify messy details; preserve intent
-      - Output a complete SVG string with <svg ... viewBox="..."> ... </svg>
+      Style requirements:
+      - Clean flat vector / sticker-like look
+      - Consistent outline stroke width
+      - Round caps and joins
+      - Flat fills (no gradients)
+      - Palette limited to 3–5 colors
+      - Transparent background (unless user asked otherwise)
 
-      3D modeling goals (extrusionPath):
-      - Return ONE closed silhouette outline as an SVG path 'd' string
-      - Remove jitter, repair tiny gaps, remove self-intersections where possible
-      - Keep it simple and extrudable (no holes for MVP)
-      - Ensure it is closed (ends with Z / closepath)
+      What to improve:
+      - Remove jitter and wobbly lines
+      - Fix small gaps
+      - Make shapes symmetric where appropriate
+      - Simplify messy areas while preserving intent
 
-      Return format:
-      - Return ONLY JSON that matches the schema (no markdown)
-
-      User hints (optional): #{hint_text}
-
-      Input SVG:
-      #{svg}
-
-      Optional PNG preview (base64, if provided):
-      #{""}
+      Return:
+      - One image
+      - One JSON metadata object (plain text only) matching the schema:
+        {title, style, palette, background, notes}
     TEXT
+    
+    if hint_placeholder.present?
+      message += "\n\nUser hints (optional): #{hint_placeholder}"
+    end
+    
+    if svg.present?
+      message += "\n\nOptional SVG (if available):\n#{svg}"
+    end
+    
+    message
   end
 
-  def call_api(user_message)
+  def call_api(user_message, png_base64)
     url = "#{API_BASE_URL}?key=#{@api_key}"
     conn = Faraday.new do |f|
       f.request :json
       f.response :json
       f.adapter Faraday.default_adapter
-      # Set longer timeouts for Gemini API (it can take a while to process complex SVGs)
+      # Set longer timeouts for Gemini API (it can take a while to process images)
       f.options.timeout = 300 # 5 minutes for the request
       f.options.open_timeout = 30 # 30 seconds to establish connection
       f.options.read_timeout = 300 # 5 minutes to read response
     end
 
-    # Build payload according to Gemini API v1beta format
-    payload = {
-      contents: [
-        {
-          parts: [
-            { text: "#{SYSTEM_MESSAGE}\n\n#{user_message}" }
-          ]
-        }
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: JSON_SCHEMA
+    # Build payload with image part and text part
+    parts = []
+    
+    # Add image part (PNG as base64)
+    parts << {
+      inline_data: {
+        mime_type: "image/png",
+        data: png_base64
       }
     }
     
-    # Add systemInstruction if supported (some models support it, others don't)
-    # For now, we'll include it in the user message to ensure compatibility
-    # Uncomment below if your model supports systemInstruction:
-    # payload[:systemInstruction] = {
-    #   parts: [
-    #     { text: SYSTEM_MESSAGE }
-    #   ]
-    # }
+    # Add text part
+    parts << { text: "#{SYSTEM_MESSAGE}\n\n#{user_message}" }
+    
+    payload = {
+      contents: [
+        {
+          parts: parts
+        }
+      ],
+      generationConfig: {
+        # Don't force JSON-only response - we need both image and text parts
+        # The text part should contain JSON metadata, but we'll parse it manually
+        temperature: 0.2 # Low temperature for steadier results
+      }
+    }
 
-    Rails.logger.info("Calling Gemini API with SVG length: #{user_message.length}")
-    puts "[GeminiService] Calling Gemini API with SVG length: #{user_message.length}"
+    Rails.logger.info("Calling Gemini API with PNG image (base64 length: #{png_base64.length})")
+    puts "[GeminiService] Calling Gemini API with PNG image (base64 length: #{png_base64.length})"
     puts "[GeminiService] Request URL: #{url.gsub(/key=[^&]+/, 'key=***')}"
     puts "[GeminiService] Payload size: #{payload.to_json.length} bytes"
     puts "[GeminiService] Timeout settings: open=30s, read=300s, total=300s"
@@ -219,56 +218,107 @@ class GeminiService
     puts JSON.pretty_generate(response_body)
     puts "[GeminiService] Response keys: #{response_body.keys.inspect}"
     
-    # Extract the text content from Gemini's response structure
+    # Extract candidates from Gemini's response structure
     candidates = response_body.dig("candidates") || []
     puts "[GeminiService] Found #{candidates.length} candidate(s)"
     
     raise InvalidResponseError, "No candidates in response" if candidates.empty?
 
-    content = candidates.first.dig("content", "parts")&.first&.dig("text")
-    puts "[GeminiService] Content present: #{content.present?}, length: #{content&.length}"
+    candidate = candidates.first
+    parts = candidate.dig("content", "parts") || []
+    puts "[GeminiService] Found #{parts.length} part(s) in response"
     
-    raise InvalidResponseError, "No text content in response" if content.blank?
-
-    # Parse the JSON string
-    begin
-      parsed = JSON.parse(content)
-      puts "[GeminiService] Parsed JSON successfully:"
-      puts JSON.pretty_generate(parsed)
-      puts "[GeminiService] Parsed keys: #{parsed.keys.inspect}"
-    rescue JSON::ParserError => e
-      puts "[GeminiService] JSON parse error: #{e.message}"
-      puts "[GeminiService] Content preview: #{content[0..500]}"
-      raise InvalidResponseError, "Failed to parse JSON response: #{e.message}"
+    # Extract image (base64) from parts
+    image_part = parts.find { |p| p["inline_data"] }
+    image_base64 = nil
+    
+    if image_part && image_part["inline_data"]
+      image_base64 = image_part["inline_data"]["data"]
+      puts "[GeminiService] Found image part, base64 length: #{image_base64&.length}"
+    else
+      puts "[GeminiService] No image part found in response"
+      raise InvalidResponseError, "No image in response"
+    end
+    
+    # Extract JSON metadata from text parts
+    text_part = parts.find { |p| p["text"].present? }
+    metadata_json = nil
+    
+    if text_part && text_part["text"].present?
+      text_content = text_part["text"]
+      puts "[GeminiService] Found text part, length: #{text_content.length}"
+      
+      # Try to parse JSON from text content
+      begin
+        # Remove markdown code blocks if present
+        cleaned_text = text_content.gsub(/```json\s*/, "").gsub(/```\s*/, "").strip
+        metadata_json = JSON.parse(cleaned_text)
+        puts "[GeminiService] Parsed JSON metadata successfully:"
+        puts JSON.pretty_generate(metadata_json)
+      rescue JSON::ParserError => e
+        puts "[GeminiService] JSON parse error: #{e.message}"
+        puts "[GeminiService] Text content preview: #{text_content[0..500]}"
+        # Create default metadata if parsing fails
+        metadata_json = {
+          "title" => "Improved Sketch",
+          "style" => "clean flat vector",
+          "palette" => [],
+          "background" => "transparent",
+          "notes" => "Sketch improved"
+        }
+        puts "[GeminiService] Using default metadata"
+      end
+    else
+      puts "[GeminiService] No text part found, using default metadata"
+      metadata_json = {
+        "title" => "Improved Sketch",
+        "style" => "clean flat vector",
+        "palette" => [],
+        "background" => "transparent",
+        "notes" => "Sketch improved"
+      }
     end
     
     # Validate required fields
-    required_fields = %w[displaySvg extrusionPath isClosed suggestedDepth suggestedBevel palette notes]
-    missing = required_fields - parsed.keys
+    required_fields = %w[title style palette background notes]
+    missing = required_fields - metadata_json.keys
     if missing.any?
-      puts "[GeminiService] Missing required fields: #{missing.join(', ')}"
-      puts "[GeminiService] Available fields: #{parsed.keys.join(', ')}"
-      raise InvalidResponseError, "Missing required fields: #{missing.join(', ')}"
+      puts "[GeminiService] Missing required metadata fields: #{missing.join(', ')}"
+      puts "[GeminiService] Available fields: #{metadata_json.keys.join(', ')}"
+      # Fill in missing fields with defaults
+      missing.each do |field|
+        case field
+        when "title"
+          metadata_json["title"] = "Improved Sketch"
+        when "style"
+          metadata_json["style"] = "clean flat vector"
+        when "palette"
+          metadata_json["palette"] = []
+        when "background"
+          metadata_json["background"] = "transparent"
+        when "notes"
+          metadata_json["notes"] = "Sketch improved"
+        end
+      end
     end
 
     # Convert to symbol keys for consistency
     result = {
-      displaySvg: parsed["displaySvg"],
-      extrusionPath: parsed["extrusionPath"],
-      isClosed: parsed["isClosed"],
-      suggestedDepth: parsed["suggestedDepth"].to_f,
-      suggestedBevel: parsed["suggestedBevel"].to_f,
-      palette: parsed["palette"] || [],
-      notes: parsed["notes"]
+      image_base64: image_base64,
+      title: metadata_json["title"],
+      style: metadata_json["style"],
+      palette: metadata_json["palette"] || [],
+      background: metadata_json["background"],
+      notes: metadata_json["notes"]
     }
     
     puts "[GeminiService] Successfully parsed response"
-    puts "[GeminiService] displaySvg length: #{result[:displaySvg].length}"
-    puts "[GeminiService] extrusionPath length: #{result[:extrusionPath].length}"
-    puts "[GeminiService] isClosed: #{result[:isClosed]}"
-    puts "[GeminiService] suggestedDepth: #{result[:suggestedDepth]}"
-    puts "[GeminiService] suggestedBevel: #{result[:suggestedBevel]}"
-    puts "[GeminiService] palette: #{result[:palette].inspect}"
+    puts "[GeminiService] Image base64 length: #{result[:image_base64].length}"
+    puts "[GeminiService] Title: #{result[:title]}"
+    puts "[GeminiService] Style: #{result[:style]}"
+    puts "[GeminiService] Palette: #{result[:palette].inspect}"
+    puts "[GeminiService] Background: #{result[:background]}"
+    puts "[GeminiService] Notes: #{result[:notes]}"
     
     result
   end
