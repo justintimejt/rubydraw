@@ -5,3 +5,4 @@ const endpoint = import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:3000
 export const graphqlClient = new GraphQLClient(endpoint);
 
 
+

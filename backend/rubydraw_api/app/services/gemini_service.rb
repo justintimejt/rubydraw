@@ -3,8 +3,10 @@
 # Service class for interacting with Google Gemini API
 # Handles sketch improvement requests with image generation
 class GeminiService
-  # Using Gemini 2.0 Flash Preview with image generation
-  API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent"
+  # Using Gemini 2.5 Flash Image via AI Platform API
+  API_BASE_URL = "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash-image:generateContent"
+  # Default non-image model for text generation tasks
+  DEFAULT_NON_IMAGE_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
   # JSON Schema for metadata output - must match Gemini API format
   JSON_SCHEMA = {
     type: "object",
@@ -172,6 +174,7 @@ class GeminiService
     payload = {
       contents: [
         {
+          role: "user",
           parts: parts
         }
       ],
@@ -207,6 +210,13 @@ class GeminiService
     end
 
     puts "[GeminiService] API call successful"
+    puts "[GeminiService] Response status: #{response.status}"
+    puts "[GeminiService] Response headers:"
+    response.headers.each do |key, value|
+      if key.downcase.include?('rate') || key.downcase.include?('limit') || key.downcase.include?('quota')
+        puts "  #{key}: #{value}"
+      end
+    end
     puts "[GeminiService] Full response body:"
     puts JSON.pretty_generate(response.body)
     response.body
@@ -227,16 +237,38 @@ class GeminiService
     candidate = candidates.first
     parts = candidate.dig("content", "parts") || []
     puts "[GeminiService] Found #{parts.length} part(s) in response"
+    puts "[GeminiService] Parts structure: #{parts.map { |p| p.keys }.inspect}"
     
     # Extract image (base64) from parts
-    image_part = parts.find { |p| p["inline_data"] }
+    # Try different possible formats for image data
+    image_part = parts.find { |p| p["inline_data"] || p["inlineData"] }
     image_base64 = nil
     
-    if image_part && image_part["inline_data"]
-      image_base64 = image_part["inline_data"]["data"]
-      puts "[GeminiService] Found image part, base64 length: #{image_base64&.length}"
-    else
+    if image_part
+      # Handle both snake_case and camelCase
+      inline_data = image_part["inline_data"] || image_part["inlineData"]
+      if inline_data
+        image_base64 = inline_data["data"] || inline_data["data"]
+        puts "[GeminiService] Found image part, base64 length: #{image_base64&.length}"
+      end
+    end
+    
+    # If still no image, check all parts for any data field
+    if image_base64.nil?
+      parts.each_with_index do |part, idx|
+        puts "[GeminiService] Part #{idx}: #{part.keys.inspect}"
+        if part["inline_data"] || part["inlineData"]
+          inline_data = part["inline_data"] || part["inlineData"]
+          image_base64 = inline_data["data"] if inline_data
+          puts "[GeminiService] Found image in part #{idx}, base64 length: #{image_base64&.length}"
+          break
+        end
+      end
+    end
+    
+    if image_base64.nil?
       puts "[GeminiService] No image part found in response"
+      puts "[GeminiService] Available parts: #{parts.inspect}"
       raise InvalidResponseError, "No image in response"
     end
     
