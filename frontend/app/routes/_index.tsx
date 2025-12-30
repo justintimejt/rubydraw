@@ -5,10 +5,7 @@ export default function IndexRoute() {
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
       <h1>Rubydraw</h1>
       <p>
-        <Link to="/b/demo">Open demo board</Link>
-      </p>
-      <p>
-        <Link to="/board">Legacy board</Link>
+        <Link to="/board">Open board</Link>
       </p>
     </main>
   );
