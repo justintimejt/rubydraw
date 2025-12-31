@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 # Service class for interacting with Google Gemini API
 # Handles sketch improvement requests with image generation
 class GeminiService
@@ -72,11 +74,27 @@ class GeminiService
     puts "[GeminiService] PNG base64 length: #{png_base64.length}"
     puts "[GeminiService] SVG provided: #{svg.present?}"
     puts "[GeminiService] Hints: #{hints || 'none'}"
+
+    cache_key = cache_key(png_base64: png_base64, svg: svg, hints: hints)
+    
+    # Try cache first
+    cached_result = Rails.cache.read(cache_key)
+    if cached_result
+      puts "[GeminiService] Cache HIT for key: #{cache_key[0..50]}..."
+      return cached_result
+    end
+
+    puts "[GeminiService] Cache MISS, calling API..."
     
     user_message = build_user_message(svg, hints)
     response = call_api(user_message, png_base64)
+    result = parse_response(response)
 
-    parse_response(response)
+    # Cache the result (7 days TTL)
+    Rails.cache.write(cache_key, result, expires_in: 7.days)
+    puts "[GeminiService] Result cached with key: #{cache_key[0..50]}..."
+
+    result
   rescue Faraday::TimeoutError => e
     error_message = "Gemini API request timed out: #{e.message}"
     Rails.logger.error("Gemini API timeout: #{e.message}")
@@ -106,6 +124,14 @@ class GeminiService
   end
 
   private
+
+  def cache_key(png_base64:, svg: nil, hints: nil)
+    # Create a digest of inputs for cache key
+    # Use full PNG base64 for accurate cache hits
+    input_string = "#{png_base64}:#{svg || ''}:#{hints || ''}"
+    digest = Digest::SHA256.hexdigest(input_string)
+    "improve_sketch:v1:#{digest}"
+  end
 
   def build_user_message(svg, hints)
     hint_text = hints&.strip&.present? ? hints.strip : "None"

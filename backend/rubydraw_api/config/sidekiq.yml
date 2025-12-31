@@ -1,0 +1,10 @@
+:concurrency: <%= ENV.fetch("SIDEKIQ_CONCURRENCY", 5).to_i %>
+:queues:
+  - default
+  - improve_sketch
+
+:timeout: 300
+
+# Development: log to stdout
+:logfile: ./log/sidekiq.log
+

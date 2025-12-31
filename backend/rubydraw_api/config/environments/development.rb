@@ -24,7 +24,18 @@ Rails.application.configure do
   end
 
   # Change to :null_store to avoid any caching.
-  config.cache_store = :memory_store
+  # Use Redis cache store if REDIS_URL is set, otherwise use memory_store
+  if ENV["REDIS_URL"].present?
+    config.cache_store = :redis_cache_store, {
+      url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"),
+      namespace: "rubydraw_cache",
+      expires_in: 7.days,
+      pool_size: ENV.fetch("REDIS_POOL_SIZE", 5).to_i,
+      pool_timeout: 5
+    }
+  else
+    config.cache_store = :memory_store
+  end
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local

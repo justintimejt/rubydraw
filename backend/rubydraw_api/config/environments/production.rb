@@ -44,7 +44,15 @@ Rails.application.configure do
   config.active_support.report_deprecations = false
 
   # Replace the default in-process memory cache store with a durable alternative.
-  # config.cache_store = :mem_cache_store
+  # Use Redis cache store for production
+  config.cache_store = :redis_cache_store, {
+    url: ENV.fetch("REDIS_URL"),
+    namespace: "rubydraw_cache",
+    expires_in: 7.days,
+    pool_size: ENV.fetch("REDIS_POOL_SIZE", 10).to_i,
+    pool_timeout: 5,
+    reconnect_attempts: 3
+  }
 
   # Replace the default in-process and non-durable queuing backend for Active Job.
   # config.active_job.queue_adapter = :resque
