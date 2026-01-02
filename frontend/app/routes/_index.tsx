@@ -31,7 +31,6 @@ export default function IndexRoute() {
             margin: "0 auto",
             width: "85%",
             maxWidth: "750px",
-            paddingBottom: "40px",
           }}
         />
         <h1 className="relative text-2xl md:text-4xl font-serif font-medium mb-3 text-neutral-700 text-pretty" style={{ paddingTop: "40px" }}>

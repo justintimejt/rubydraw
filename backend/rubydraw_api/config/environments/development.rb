@@ -34,7 +34,7 @@ Rails.application.configure do
       pool_timeout: 5
     }
   else
-    config.cache_store = :memory_store
+  config.cache_store = :memory_store
   end
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
