@@ -10,8 +10,9 @@ export default function IndexRoute() {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-start",
         padding: "40px 20px",
+        overflowY: "auto",
       }}
     >
       <div
@@ -21,11 +22,23 @@ export default function IndexRoute() {
           width: "100%",
         }}
       >
-        <h1 className="mt-[40dvh] md:mt-[53dvh] relative text-2xl md:text-4xl font-serif font-medium mb-3 text-neutral-700 text-pretty">
-          TURN ROUGH SKETCHES INTO STUNNING DRAWINGS
+        <img
+          src="/boardpreview.jpeg"
+          alt="Board Preview"
+          className="rounded-xl shadow-lg object-contain"
+          style={{
+            display: "block",
+            margin: "0 auto",
+            width: "85%",
+            maxWidth: "750px",
+            paddingBottom: "40px",
+          }}
+        />
+        <h1 className="relative text-2xl md:text-4xl font-serif font-medium mb-3 text-neutral-700 text-pretty" style={{ paddingTop: "40px" }}>
+          Turn Rough Sketches Into Stunning Drawings
         </h1>
 
-          <div className="relative font-medium text-neutral-500 mb-20 md:text-lg leading-relaxed">
+          <div className="relative font-medium text-neutral-500 mb-8 md:text-lg leading-relaxed">
           Ruby Draw is tldraw for your creative ideas.
           <br />
           Create beautiful drawings from your roughest sketches in seconds.
