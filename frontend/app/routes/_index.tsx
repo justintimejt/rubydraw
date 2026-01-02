@@ -7,6 +7,11 @@ export default function IndexRoute() {
         position: "fixed",
         inset: 0,
         background: "#ffffff",
+        backgroundImage: `
+          linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+          linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+        `,
+        backgroundSize: "24px 24px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
