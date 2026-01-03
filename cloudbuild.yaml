@@ -1,12 +1,20 @@
+availableSecrets:
+  secretManager:
+    - versionName: projects/${PROJECT_ID}/secrets/tldraw-license-key/versions/latest
+      env: 'VITE_TLDRAW_LICENSE_KEY'
+
 steps:
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
+    secretEnv: ['VITE_TLDRAW_LICENSE_KEY']
     args:
       - 'build'
       - '-t'
       - '${_IMAGE_NAME}:${SHORT_SHA}'
       - '-t'
       - '${_IMAGE_NAME}:latest'
+      - '--build-arg'
+      - 'VITE_TLDRAW_LICENSE_KEY=$$VITE_TLDRAW_LICENSE_KEY'
       - '-f'
       - 'Dockerfile'
       - '.'

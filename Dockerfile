@@ -10,6 +10,9 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY --from=dev-deps /app/node_modules ./node_modules
 COPY frontend/ ./
+# Accept build-time argument for tldraw license key
+ARG VITE_TLDRAW_LICENSE_KEY
+ENV VITE_TLDRAW_LICENSE_KEY=$VITE_TLDRAW_LICENSE_KEY
 RUN npm run build
 
 FROM node:20-alpine AS prod-deps
