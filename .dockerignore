@@ -1,0 +1,9 @@
+.git
+.vscode
+backend
+documentation
+boardpreview.jpeg
+frontend/.react-router
+frontend/build
+frontend/node_modules
+**/.DS_Store
