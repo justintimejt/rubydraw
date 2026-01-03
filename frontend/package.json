@@ -21,7 +21,8 @@
     "react-router": "7.10.1",
     "three": "^0.182.0",
     "three-stdlib": "^2.30.0",
-    "tldraw": "^4.2.1"
+    "tldraw": "^4.2.1",
+    "@tldraw/assets": "^4.2.1"
   },
   "devDependencies": {
     "@react-router/dev": "7.10.1",
