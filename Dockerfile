@@ -29,8 +29,6 @@ ENV HOST=0.0.0.0
 COPY frontend/package*.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
-# Copy the start server wrapper script
-COPY frontend/start-server.js ./start-server.js
-RUN chmod +x ./start-server.js
 EXPOSE 8080
-CMD ["node", "start-server.js"]
+# Use npm start which runs react-router-serve and respects PORT and HOST environment variables
+CMD ["npm", "run", "start"]
