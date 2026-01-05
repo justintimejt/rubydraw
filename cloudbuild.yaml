@@ -1,3 +1,11 @@
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  secretEnv: ['VITE_TLDRAW_LICENSE_KEY']
+  args:
+    - '-c'
+    - 'echo "tldraw key length: ${#VITE_TLDRAW_LICENSE_KEY}"; test -n "$VITE_TLDRAW_LICENSE_KEY"'
+  id: 'check-secret'
+  
 availableSecrets:
   secretManager:
     - versionName: projects/$PROJECT_ID/secrets/VITE_TLDRAW_LICENSE_KEY/versions/latest
