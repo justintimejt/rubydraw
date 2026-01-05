@@ -13,6 +13,7 @@ COPY frontend/ ./
 # Accept build-time argument for tldraw license key
 ARG VITE_TLDRAW_LICENSE_KEY
 ENV VITE_TLDRAW_LICENSE_KEY=$VITE_TLDRAW_LICENSE_KEY
+RUN test -n "$VITE_TLDRAW_LICENSE_KEY" || (echo "Missing VITE_TLDRAW_LICENSE_KEY at build time" && exit 1)
 RUN npm run build
 
 FROM node:20-alpine AS prod-deps
