@@ -12,6 +12,7 @@ export function TldrawBoard({
 }) {
   const [assetUrls, setAssetUrls] = React.useState<any>(undefined);
   const licenseKey = import.meta.env.VITE_TLDRAW_LICENSE_KEY;
+  console.log('[tldraw] license present?', Boolean(licenseKey), 'len=', licenseKey?.length ?? 0)
 
   // Only load asset URLs on the client side (not during SSR)
   React.useEffect(() => {
