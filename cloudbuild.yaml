@@ -9,7 +9,13 @@ steps:
     secretEnv: ['VITE_TLDRAW_LICENSE_KEY']
     args:
       - '-c'
-      - 'echo "tldraw key length: ${#VITE_TLDRAW_LICENSE_KEY}"; test -n "$VITE_TLDRAW_LICENSE_KEY"'
+      - |
+        if [ -z "$$VITE_TLDRAW_LICENSE_KEY" ]; then
+          echo "ERROR: VITE_TLDRAW_LICENSE_KEY secret is empty or not accessible"
+          echo "Please ensure the Cloud Build service account has Secret Manager Secret Accessor role"
+          exit 1
+        fi
+        echo "✓ Secret loaded (length: $${#VITE_TLDRAW_LICENSE_KEY})"
     id: 'check-secret'
 
   - name: 'gcr.io/cloud-builders/docker'
@@ -18,6 +24,10 @@ steps:
     args:
       - '-c'
       - |
+        if [ -z "$$VITE_TLDRAW_LICENSE_KEY" ]; then
+          echo "ERROR: VITE_TLDRAW_LICENSE_KEY is not set in build step"
+          exit 1
+        fi
         docker build \
           -t "${_IMAGE_NAME}:${SHORT_SHA}" \
           -t "${_IMAGE_NAME}:latest" \
