@@ -43,7 +43,9 @@ export async function exportSelectedShapesAsSvg(editor: Editor): Promise<string 
     console.error('tldraw SVG export methods not found or returned invalid data');
     return null;
   } catch (error) {
-    console.error('Error exporting SVG from tldraw:', error);
+    // Log error message only, not full error object (may contain sensitive data)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Error exporting SVG from tldraw:', errorMessage);
     return null;
   }
 }

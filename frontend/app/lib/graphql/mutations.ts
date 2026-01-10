@@ -19,7 +19,7 @@ const IMPROVE_SKETCH_MUTATION = `
 export async function improveSketch(pngBase64: string, svg?: string, hints?: string) {
   // Validate pngBase64 is actually a string
   if (typeof pngBase64 !== 'string') {
-    console.error('improveSketch called with non-string pngBase64:', typeof pngBase64, pngBase64);
+    console.error('improveSketch called with non-string pngBase64:', typeof pngBase64);
     throw new Error(`PNG base64 must be a string, got ${typeof pngBase64}`);
   }
   
@@ -49,7 +49,9 @@ export async function improveSketch(pngBase64: string, svg?: string, hints?: str
     });
     return data.improveSketch;
   } catch (error) {
-    console.error("GraphQL request error:", error);
+    // Log error message only, not full error object (may contain sensitive data)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("GraphQL request error:", errorMessage);
     throw error;
   }
 }

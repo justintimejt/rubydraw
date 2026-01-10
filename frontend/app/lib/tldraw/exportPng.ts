@@ -50,7 +50,9 @@ export async function exportSelectedShapesAsPng(editor: Editor): Promise<string 
     // Convert SVG to PNG using canvas
     return await svgToPngBase64(svgString);
   } catch (error) {
-    console.error('Error exporting PNG from tldraw:', error);
+    // Log error message only, not full error object (may contain sensitive data)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Error exporting PNG from tldraw:', errorMessage);
     return null;
   }
 }

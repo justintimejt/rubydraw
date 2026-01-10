@@ -12,7 +12,10 @@ export function TldrawBoard({
 }) {
   const [assetUrls, setAssetUrls] = React.useState<any>(undefined);
   const licenseKey = import.meta.env.VITE_TLDRAW_LICENSE_KEY;
-  console.log('[tldraw] license present?', Boolean(licenseKey), 'len=', licenseKey?.length ?? 0)
+  // Only log license presence in development (never log the actual key)
+  if (import.meta.env.DEV) {
+    console.log('[tldraw] license present:', Boolean(licenseKey));
+  }
 
   // Only load asset URLs on the client side (not during SSR)
   React.useEffect(() => {
@@ -22,7 +25,9 @@ export function TldrawBoard({
         const urls = module.getAssetUrlsByImport();
         setAssetUrls(urls);
       }).catch((error) => {
-        console.error("Failed to load tldraw assets:", error);
+        // Log error message only, not full error object
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Failed to load tldraw assets:", errorMessage);
         // Continue without asset URLs - tldraw will use defaults
       });
     }

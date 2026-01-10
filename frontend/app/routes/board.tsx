@@ -175,21 +175,23 @@ export default function Board() {
       const originalShapeId = currentSelection.length > 0 ? currentSelection[0] : undefined;
       addImprovedImageToCanvas(editor, improvedData.imageBase64, originalShapeId);
     } catch (error) {
-      console.error("Improve sketch error:", error);
-      let errorMessage = "Failed to improve sketch";
+      // Log error message only, not full error object (may contain sensitive data)
+      const errorLogMessage = error instanceof Error ? error.message : String(error);
+      console.error("Improve sketch error:", errorLogMessage);
+      let displayErrorMessage = "Failed to improve sketch";
       
       if (error instanceof Error) {
         if (error.message.includes("fetch")) {
-          errorMessage = `Network error: Cannot connect to backend. Make sure the Rails server is running on ${import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:3000/graphql'}`;
+          displayErrorMessage = `Network error: Cannot connect to backend. Make sure the Rails server is running on ${import.meta.env.VITE_GRAPHQL_ENDPOINT || 'http://localhost:3000/graphql'}`;
         } else {
-          errorMessage = error.message;
+          displayErrorMessage = error.message;
         }
       }
       
       setImproveState({
         status: "error",
         data: null,
-        error: errorMessage,
+        error: displayErrorMessage,
       });
     }
   }, [editor]);
